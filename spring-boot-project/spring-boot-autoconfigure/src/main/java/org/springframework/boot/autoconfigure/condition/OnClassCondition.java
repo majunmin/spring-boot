@@ -43,16 +43,28 @@ import org.springframework.util.StringUtils;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class OnClassCondition extends FilteringSpringBootCondition {
 
+	/**
+	 * 条件配置解析器的 选取 和 work
+	 * - {@link StandardOutcomesResolver}
+	 * - {@link ThreadedOutcomesResolver} (用一个额外的线程异步处理(volatile 结果), 内部使用的还是   StandardOutcomesResolver)
+	 *
+	 * @param autoConfigurationClasses
+	 * @param autoConfigurationMetadata
+	 * @return
+	 */
 	@Override
 	protected final ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
 			AutoConfigurationMetadata autoConfigurationMetadata) {
 		// Split the work and perform half in a background thread if more than one
 		// processor is available. Using a single additional thread seems to offer the
 		// best performance. More threads make things worse.
+		// 如果有多个处理器可用，则将工作拆分并在后台线程中执行一半,使用一个额外的线程似乎可以提供最好的性能
+		// 线程越多,并不见得性能会更好,可能会更糟糕
 		if (autoConfigurationClasses.length > 1 && Runtime.getRuntime().availableProcessors() > 1) {
 			return resolveOutcomesThreaded(autoConfigurationClasses, autoConfigurationMetadata);
 		}
 		else {
+			// 如果只有一个配置类 就使用  StandardOutcomesResolver
 			OutcomesResolver outcomesResolver = new StandardOutcomesResolver(autoConfigurationClasses, 0,
 					autoConfigurationClasses.length, autoConfigurationMetadata, getBeanClassLoader());
 			return outcomesResolver.resolveOutcomes();
@@ -62,6 +74,7 @@ class OnClassCondition extends FilteringSpringBootCondition {
 	private ConditionOutcome[] resolveOutcomesThreaded(String[] autoConfigurationClasses,
 			AutoConfigurationMetadata autoConfigurationMetadata) {
 		int split = autoConfigurationClasses.length / 2;
+		// 创建一个额外的线程处理 halfwork
 		OutcomesResolver firstHalfResolver = createOutcomesResolver(autoConfigurationClasses, 0, split,
 				autoConfigurationMetadata);
 		OutcomesResolver secondHalfResolver = new StandardOutcomesResolver(autoConfigurationClasses, split,
@@ -140,12 +153,15 @@ class OnClassCondition extends FilteringSpringBootCondition {
 
 	}
 
+	// 异步处理
 	private static final class ThreadedOutcomesResolver implements OutcomesResolver {
 
 		private final Thread thread;
 
+		// 配置类解析后的结果集, 保证可见性
 		private volatile ConditionOutcome[] outcomes;
 
+		// 根据给定的解析器构建 ThreadedOutcomesResolver, 一般参数就是  StandardOutcomesResolver
 		private ThreadedOutcomesResolver(OutcomesResolver outcomesResolver) {
 			this.thread = new Thread(() -> this.outcomes = outcomesResolver.resolveOutcomes());
 			this.thread.start();
@@ -166,16 +182,22 @@ class OnClassCondition extends FilteringSpringBootCondition {
 
 	private static final class StandardOutcomesResolver implements OutcomesResolver {
 
+		// 所有的配置类
 		private final String[] autoConfigurationClasses;
 
+		// 开始索引
 		private final int start;
 
+		// 结束索引
 		private final int end;
 
+		// 配置类注解元数据
 		private final AutoConfigurationMetadata autoConfigurationMetadata;
 
+		// 类加载器
 		private final ClassLoader beanClassLoader;
 
+		//新建一个标准的`条件匹配解析实例对象`
 		private StandardOutcomesResolver(String[] autoConfigurationClasses, int start, int end,
 				AutoConfigurationMetadata autoConfigurationMetadata, ClassLoader beanClassLoader) {
 			this.autoConfigurationClasses = autoConfigurationClasses;
@@ -185,19 +207,25 @@ class OnClassCondition extends FilteringSpringBootCondition {
 			this.beanClassLoader = beanClassLoader;
 		}
 
+		//解析配置类是否符合条件并返回结果集
 		@Override
 		public ConditionOutcome[] resolveOutcomes() {
 			return getOutcomes(this.autoConfigurationClasses, this.start, this.end, this.autoConfigurationMetadata);
 		}
 
+		//解析配置类是否符合条件并返回结果集
 		private ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses, int start, int end,
 				AutoConfigurationMetadata autoConfigurationMetadata) {
+			//新建一个条件匹配解析后的结果集数组
 			ConditionOutcome[] outcomes = new ConditionOutcome[end - start];
 			for (int i = start; i < end; i++) {
-				String autoConfigurationClass = autoConfigurationClasses[i];
+				String autoConfigurationClass = autoConfigurationClasses[i];//解析条件类是否存在，如果不存在返回ConditionOutcome对象match为false及日志信息
+				//如果符合条件，即类实例存在，则返回null
 				if (autoConfigurationClass != null) {
 					String candidates = autoConfigurationMetadata.get(autoConfigurationClass, "ConditionalOnClass");
 					if (candidates != null) {
+						//解析条件类是否存在，如果不存在返回ConditionOutcome对象match为false及日志信息
+						//如果符合条件,即类实例存在 return null
 						outcomes[i - start] = getOutcome(candidates);
 					}
 				}
@@ -205,12 +233,17 @@ class OnClassCondition extends FilteringSpringBootCondition {
 			return outcomes;
 		}
 
+		//解析条件类是否存在，如果不存在返回ConditionOutcome对象match为false及日志信息
+		//如果符合条件,即类实例存在 return null
 		private ConditionOutcome getOutcome(String candidates) {
 			try {
+				//1. 如果只有一个条件类存在
 				if (!candidates.contains(",")) {
 					return getOutcome(candidates, this.beanClassLoader);
 				}
+				//2. 如果有多个条件类存在
 				for (String candidate : StringUtils.commaDelimitedListToStringArray(candidates)) {
+					//获取条件类验证的结果集 (这里可以看出 ConditionalOnClass 是 与的关系, 只要有一个 class 不存在，就不符合条件)
 					ConditionOutcome outcome = getOutcome(candidate, this.beanClassLoader);
 					if (outcome != null) {
 						return outcome;
@@ -223,11 +256,14 @@ class OnClassCondition extends FilteringSpringBootCondition {
 			return null;
 		}
 
+		//获取条件类验证的结果集
 		private ConditionOutcome getOutcome(String className, ClassLoader classLoader) {
+			//如果条件类不存在，则返回不匹配信息
 			if (ClassNameFilter.MISSING.matches(className, classLoader)) {
 				return ConditionOutcome.noMatch(ConditionMessage.forCondition(ConditionalOnClass.class)
 						.didNotFind("required class").items(Style.QUOTE, className));
 			}
+			//如果条件类存在
 			return null;
 		}
 

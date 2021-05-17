@@ -44,17 +44,23 @@ import org.springframework.web.context.WebApplicationContext;
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 class OnWebApplicationCondition extends FilteringSpringBootCondition {
 
+	// servlet 应用上下文类
 	private static final String SERVLET_WEB_APPLICATION_CLASS = "org.springframework.web.context.support.GenericWebApplicationContext";
 
+	// Reactive 应用上下文类
 	private static final String REACTIVE_WEB_APPLICATION_CLASS = "org.springframework.web.reactive.HandlerResult";
 
+	// 根据自动化配置注解元数据获取指定配置类集合注解条件的匹配结果集
 	@Override
 	protected ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
 			AutoConfigurationMetadata autoConfigurationMetadata) {
+		//新建配置类大小的结果集数组
 		ConditionOutcome[] outcomes = new ConditionOutcome[autoConfigurationClasses.length];
 		for (int i = 0; i < outcomes.length; i++) {
 			String autoConfigurationClass = autoConfigurationClasses[i];
 			if (autoConfigurationClass != null) {
+				//首先根据自动化配置类获取对应条件`ConditionalOnWebApplication`的配置,将其作为参数获取匹配结果
+				//如果匹配则返回null,否则返回匹配结果及错误日志信息对象
 				outcomes[i] = getOutcome(
 						autoConfigurationMetadata.get(autoConfigurationClass, "ConditionalOnWebApplication"));
 			}
@@ -63,6 +69,7 @@ class OnWebApplicationCondition extends FilteringSpringBootCondition {
 	}
 
 	private ConditionOutcome getOutcome(String type) {
+		// 如果 type 是null,直接返回匹配
 		if (type == null) {
 			return null;
 		}

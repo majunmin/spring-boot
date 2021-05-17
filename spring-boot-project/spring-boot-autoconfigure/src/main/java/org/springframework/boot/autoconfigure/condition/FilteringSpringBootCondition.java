@@ -45,7 +45,9 @@ abstract class FilteringSpringBootCondition extends SpringBootCondition
 
 	@Override
 	public boolean[] match(String[] autoConfigurationClasses, AutoConfigurationMetadata autoConfigurationMetadata) {
+		// 获取 条件评估器 report 类
 		ConditionEvaluationReport report = ConditionEvaluationReport.find(this.beanFactory);
+		// 获取匹配结果
 		ConditionOutcome[] outcomes = getOutcomes(autoConfigurationClasses, autoConfigurationMetadata);
 		boolean[] match = new boolean[outcomes.length];
 		for (int i = 0; i < outcomes.length; i++) {
@@ -53,6 +55,7 @@ abstract class FilteringSpringBootCondition extends SpringBootCondition
 			if (!match[i] && outcomes[i] != null) {
 				logOutcome(autoConfigurationClasses[i], outcomes[i]);
 				if (report != null) {
+					//将数据存入条件评估报告对象集合
 					report.recordConditionEvaluation(autoConfigurationClasses[i], this, outcomes[i]);
 				}
 			}
@@ -60,6 +63,7 @@ abstract class FilteringSpringBootCondition extends SpringBootCondition
 		return match;
 	}
 
+	// 模板模式 ==> 获取配置类匹配结果集，具体由子类实现
 	protected abstract ConditionOutcome[] getOutcomes(String[] autoConfigurationClasses,
 			AutoConfigurationMetadata autoConfigurationMetadata);
 
@@ -121,6 +125,7 @@ abstract class FilteringSpringBootCondition extends SpringBootCondition
 
 		},
 
+		//如果条件类存在，则返回false,否则返回true
 		MISSING {
 
 			@Override
@@ -132,6 +137,7 @@ abstract class FilteringSpringBootCondition extends SpringBootCondition
 
 		abstract boolean matches(String className, ClassLoader classLoader);
 
+		//通过反射的方式获取条件类是否存在
 		static boolean isPresent(String className, ClassLoader classLoader) {
 			if (classLoader == null) {
 				classLoader = ClassUtils.getDefaultClassLoader();
